@@ -137,8 +137,10 @@ bool JailbreakDetect::symlinkCheck(){
     return false;
 }
 
-TamperingDetect::TamperingDetect(char *appPath){
+TamperingDetect::TamperingDetect(char *appPath,char *digestPlaceholder, int appSize){
     this->appPath = appPath;
+    this->digestPlaceholder = digestPlaceholder;
+    this->appSize = appSize;
 }
 
 
@@ -150,14 +152,15 @@ bool TamperingDetect::main(){
 }
 
 bool TamperingDetect::sizeCheck(){
-    unsigned char fileSizePlaceholder[] = {0xb0,0x40,0x01,0x00};
     struct stat st;
     printf("path: %s\n", this->appPath);
     
     stat(this->appPath,&st);
-    printf("size : %d\n",st.st_size);
-
-    if(*(unsigned int *)fileSizePlaceholder == st.st_size) {
+    
+    printf("size : %llx\n",st.st_size);
+    printf("%x\n",this->appSize);
+    
+    if(this->appSize == st.st_size) {
         printf("Not Modified\n");
         return false;
     }
@@ -167,11 +170,12 @@ bool TamperingDetect::sizeCheck(){
 }
 
 bool TamperingDetect::textCheck(){
-    unsigned char digest[CC_MD5_DIGEST_LENGTH];
-    unsigned char md5Placeholder[CC_MD5_DIGEST_LENGTH] = {0xcb,0x8b,0x38,0xc0,0x23,0x64,0xaa,0xba,0x45,0x7d,0x6f,0x20,0xbe,0x6b,0x9e,0x8c};
+    unsigned char raw_digest[CC_MD5_DIGEST_LENGTH];
+    char md5_digest_string[CC_MD5_DIGEST_LENGTH*2];
+
     
-    int textSize = 0x8000 - 0x5648;
-    char buffer[textSize];
+    int textSize = 0xd74;
+    char *buffer = (char *)malloc(textSize);
     
     printf("path: %s\n", this->appPath);
     FILE *fp = fopen(this->appPath,"r");
@@ -179,26 +183,22 @@ bool TamperingDetect::textCheck(){
     if(fp == NULL){
         return false;
     }
-    fseek(fp, 0x5648, SEEK_CUR);
-    
+    fseek(fp,0x5460,SEEK_CUR);
     fread(buffer, textSize, 1 , fp);
     
-    printf("%s\n",buffer);
     
-    CC_MD5(buffer, (CC_LONG)sizeof(buffer), digest);
+    CC_MD5(buffer, (CC_LONG)textSize, raw_digest);
     
-    for(int i=0;i<sizeof(digest);i++){
-        printf("%02x",digest[i]);
-    }
-    printf("\n");
+    sprintf(md5_digest_string,"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",raw_digest[0],raw_digest[1],raw_digest[2],raw_digest[3],raw_digest[4],raw_digest[5],raw_digest[6],raw_digest[7],raw_digest[8],raw_digest[9],raw_digest[10],raw_digest[11],raw_digest[12],raw_digest[13],raw_digest[14],raw_digest[15]);
     
-    for(int i=0;i<sizeof(md5Placeholder);i++){
-        printf("%02x",md5Placeholder[i]);
-    }
-    printf("\n");
+    
+    std::cout << "md5 digest : " << md5_digest_string << std::endl;
+    
+
+    std::cout << "md5 digest placeholder : " << this->digestPlaceholder << std::endl;
 
     
-    if(memcmp(digest,md5Placeholder,sizeof(digest)) == 0){
+    if(strncmp(md5_digest_string,this->digestPlaceholder,sizeof(CC_MD5_DIGEST_LENGTH*2)) == 0){
         printf("Not Modified\n");
         return false;
     }

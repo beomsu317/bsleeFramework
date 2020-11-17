@@ -32,8 +32,10 @@ public:
 class TamperingDetect{
 private:
     char *appPath;
+    char *digestPlaceholder;
+    int appSize;
 public:
-    TamperingDetect(char *appPath);
+    TamperingDetect(char *appPath,char *digestPlaceholder,int appSize);
     bool main();
     bool sizeCheck();
     bool textCheck();
