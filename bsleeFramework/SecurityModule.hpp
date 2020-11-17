@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <assert.h>
+#include <iostream>
 #include <stdbool.h>
 #include <string>
 #include <fcntl.h>
@@ -14,8 +15,7 @@
 #include <sys/mman.h>
 #include <CommonCrypto/CommonDigest.h>
 #include <dlfcn.h>
-
-
+#include <cstring>
 
 typedef int (*ptrace_ptr_t)(int _request,pid_t pid,caddr_t _addr, int _data);
 
@@ -30,7 +30,10 @@ public:
 };
 
 class TamperingDetect{
+private:
+    char *appPath;
 public:
+    TamperingDetect(char *appPath);
     bool main();
     bool sizeCheck();
     bool textCheck();

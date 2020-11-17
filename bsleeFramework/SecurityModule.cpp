@@ -1,5 +1,4 @@
-#import <Foundation/Foundation.h>
-#include "SecurityModule.h"
+#include "SecurityModule.hpp"
 
 bool JailbreakDetect::main(){
 
@@ -52,11 +51,11 @@ bool JailbreakDetect::fileDetect(){
         
     for(int i=0;i<sizeof(fileName)/sizeof(fileName[0]);i++){
         if(access((char *)fileName[i].c_str(),R_OK) > 0){
-            NSLog(@"Jailbreak File Detected %s\n",(char *)fileName[i].c_str());
+            printf("Jailbreak File Detected %s\n",(char *)fileName[i].c_str());
             return true;
         }
     }
-    NSLog(@"Jailbreak File not Detected\n");
+    printf("Jailbreak File not Detected\n");
     return false;
 }
 
@@ -64,20 +63,20 @@ bool JailbreakDetect::fileWrite(){
     int fd;
     fd = open((char *)"/private/jailbreak.txt",W_OK);
     if(fd > 0){
-        NSLog(@"Possible to Write in /private/\n");
+        printf("Possible to Write in /private/\n");
         return true;
     }
-    NSLog(@"Not Possible to Write in /private/\n");
+    printf("Not Possible to Write in /private/\n");
     return false;
 }
 
 bool JailbreakDetect::sandboxTest(){
     int pid = fork();
     if(pid > 0){
-        NSLog(@"fork Success\n");
+        printf("fork Success\n");
         return true;
     }
-    NSLog(@"fork Failed\n");
+    printf("fork Failed\n");
     return false;
 }
 
@@ -86,11 +85,11 @@ bool JailbreakDetect::dyldCkeck(){
     for(int i = 0;i < count ; i++){
         const char *dyld = _dyld_get_image_name(i);
         if(strstr(dyld,"Substrate") || strstr(dyld,"TweakInject") || strstr(dyld,"cycript") || strstr(dyld,"frida")){
-            NSLog(@"Detected %s\n",_dyld_get_image_name(i));
+            printf("Detected %s\n",_dyld_get_image_name(i));
             return true;
         }
     }
-    NSLog(@"dyld Not Detected\n");
+    printf("dyld Not Detected\n");
     return false;
 }
 
@@ -134,83 +133,76 @@ bool JailbreakDetect::symlinkCheck(){
         return true;
     }
     
-    NSLog(@"Symbolic Link not Detected\n");
+    printf("Symbolic Link not Detected\n");
     return false;
 }
 
+TamperingDetect::TamperingDetect(char *appPath){
+    this->appPath = appPath;
+}
+
+
 bool TamperingDetect::main(){
-    if(textCheck() || sizeCheck()){
+    if(sizeCheck() || textCheck()){
         return true;
     }
     return false;
 }
 
 bool TamperingDetect::sizeCheck(){
-    return false;
-    unsigned char fileSizePlaceholder[] = {0xd0,0x3f,0x01,0x00};
+    unsigned char fileSizePlaceholder[] = {0xb0,0x40,0x01,0x00};
+    struct stat st;
+    printf("path: %s\n", this->appPath);
     
-    NSString *name=@"bsApp";
-    NSString *path = [[NSBundle mainBundle] pathForResource:name ofType:0 ];
-    NSFileHandle *fh;
-    
-    NSLog(@"path: %@", path);
-    
-    
-    fh = [NSFileHandle fileHandleForReadingAtPath: path];
-    NSData *content = [fh readDataToEndOfFile];
-    unsigned int fileSize = (CC_LONG)[content length];
-    NSLog(@"file size : %d", fileSize);
-    [fh closeFile];
+    stat(this->appPath,&st);
+    printf("size : %d\n",st.st_size);
 
-    NSData *trustedSizeData = [NSData dataWithBytes:fileSizePlaceholder  length:4];
-    unsigned int trustedSize;
-    [trustedSizeData getBytes:&trustedSize length:sizeof(trustedSize)];
-
-    NSLog(@"ts : %d",trustedSize);
-    NSLog(@"fs : %d",fileSize);
-    if (trustedSize == fileSize) {
-        NSLog(@"Not Modified");
+    if(*(unsigned int *)fileSizePlaceholder == st.st_size) {
+        printf("Not Modified\n");
         return false;
     }
-    
-    NSLog(@"Modified");
+
+    printf("Modified\n");
     return true;
 }
 
 bool TamperingDetect::textCheck(){
     unsigned char digest[CC_MD5_DIGEST_LENGTH];
-    unsigned char md5Placeholder[CC_MD5_DIGEST_LENGTH] = {0xc3,0xe3,0x30,0x36,0x39,0x85,0x0c,0x59,0xc7,0xb5,0xb8,0xc7,0x7c,0x3d,0x67,0x45};
+    unsigned char md5Placeholder[CC_MD5_DIGEST_LENGTH] = {0xcb,0x8b,0x38,0xc0,0x23,0x64,0xaa,0xba,0x45,0x7d,0x6f,0x20,0xbe,0x6b,0x9e,0x8c};
     
-    int textSize = 0x8000-0x5648;
-    NSData *databuffer;
+    int textSize = 0x8000 - 0x5648;
+    char buffer[textSize];
     
-    NSString *name=@"bsApp";
-    NSString *path = [[NSBundle mainBundle] pathForResource:name ofType:0 ];
-    NSFileHandle *fh;
-
-    fh = [NSFileHandle fileHandleForReadingAtPath: path];
-
-    if (fh == nil)
-        NSLog(@"Failed to open file");
-
-    [fh seekToFileOffset: 0x5648];
-    databuffer = [fh readDataOfLength:textSize];
-    //NSLog(@"%@",databuffer);
-    [fh closeFile];
+    printf("path: %s\n", this->appPath);
+    FILE *fp = fopen(this->appPath,"r");
     
-    
-    unsigned char *d = CC_MD5([databuffer bytes], textSize, digest);
-    NSData *md5Data = [NSData dataWithBytes:d length:CC_MD5_DIGEST_LENGTH];
-    NSLog(@"data = %@", md5Data);
-    
-    NSData *md5PlaceholderData = [NSData dataWithBytes:md5Placeholder length:CC_MD5_DIGEST_LENGTH];
-    NSLog(@"trusted data = %@", md5PlaceholderData);
-
-    if([md5Data isEqual:md5PlaceholderData]){
-        NSLog(@"Not Modified");
+    if(fp == NULL){
         return false;
     }
-    NSLog(@"Modified");
+    fseek(fp, 0x5648, SEEK_CUR);
+    
+    fread(buffer, textSize, 1 , fp);
+    
+    printf("%s\n",buffer);
+    
+    CC_MD5(buffer, (CC_LONG)sizeof(buffer), digest);
+    
+    for(int i=0;i<sizeof(digest);i++){
+        printf("%02x",digest[i]);
+    }
+    printf("\n");
+    
+    for(int i=0;i<sizeof(md5Placeholder);i++){
+        printf("%02x",md5Placeholder[i]);
+    }
+    printf("\n");
+
+    
+    if(memcmp(digest,md5Placeholder,sizeof(digest)) == 0){
+        printf("Not Modified\n");
+        return false;
+    }
+    printf("Modified\n");
     return true;
 }
 
@@ -230,10 +222,10 @@ bool DebuggingDetect::beingDebugged(){
 bool DebuggingDetect::pidCheck(){
     int ppid = getppid();
     if(ppid != 1){
-        NSLog(@"Debugged ppid : %d\n",ppid);
+        printf("Debugged ppid : %d\n",ppid);
         return true;
     }
-    NSLog(@"Not Debugged ppid : %d\n",ppid);
+    printf("Not Debugged ppid : %d\n",ppid);
     return false;
 }
 
@@ -254,7 +246,7 @@ bool DebuggingDetect::sysctlCheck(){
     junk = sysctl(mib, sizeof(mib) / sizeof(*mib), &info, &size, NULL, 0);
     assert(junk == 0);
     int result = ((info.kp_proc.p_flag & P_TRACED) != 0);
-    NSLog(@"ptrace flag is %d\n",result);
+    printf("ptrace flag is %d\n",result);
     return result;
 }
 
